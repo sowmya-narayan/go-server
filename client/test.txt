@@ -1,0 +1,3 @@
+mirror.datapipe.net
+google.com
+google.co.in
