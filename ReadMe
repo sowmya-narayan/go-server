@@ -1,7 +1,13 @@
 
 
-Server -> Forntend
+-> Client -> (An front end api, requesting to server requests)
 
-Exchanger -> Bidder
 
-Finalizer -> Reducer
+Each of the below module runs as a unique server
+
+
+1. Server -> Forntend (creates a unique request id and adds the request to Q and serves requests on completion)
+
+2. Exchanger -> Bidder (fetches the request from Q and process each url)
+
+3. Finalizer -> Reducer (fetches the request from Q & polishes the request)
