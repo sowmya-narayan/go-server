@@ -9,7 +9,6 @@ import (
 	"github.com/nu7hatch/gouuid"
 	"gopkg.in/redis.v5"
 	"encoding/json"
-	"time"
 )
 
 var client = redis.NewClient(&redis.Options{
@@ -18,13 +17,10 @@ var client = redis.NewClient(&redis.Options{
 	DB:       0,  // use default DB
 	})
 
-var exhangerQ = make([]string, 100)
-var finalizerQ = make([]string, 100)
 
 func check(err error){
 	if err != nil {
 		panic(err)
-		return
 	}
 }
 
@@ -34,83 +30,20 @@ type Request struct {
 	Status string
 }
 
-func getUrl(url string, thread chan string) {
-	r, e := http.Get(url)
-	check(e)
-	thread <- string(r.Status)
-
-}
-
-func exchanger(c chan int) {
-	log.Println("IN Exchanger")
-	for {
-		if len(exhangerQ) == 0 {
-			log.Println("Exchanger Q is empty -- seepling")
-			time.Sleep(2 * time.Second)
-		} else {
-			log.Println("IN Exchanger processing")
-			id := exhangerQ[0]
-			log.Println("IN Exchanger processing req: ", exhangerQ[0])
-			exhangerQ = exhangerQ[1:]
-			log.Println("IN Exchanger processing req: ", exhangerQ)
-			obj, err := client.Get(id).Result()
-			check(err)
-
-			var req Request
-			x := json.Unmarshal([]byte(obj), &req)
-			check(x)
-			req.Status = "Exchanging"
-			serialRequest, err := json.Marshal(req)
-			err = client.Set(id, serialRequest, 0).Err()
-			check(err)
-
-			thread := make(chan string)
-			for url := range req.Urls {
-				log.Println("In side loop :", req.Urls[url])
-				go getUrl(url, thread)
-				req.Urls[url] = <-thread
-			}
-
-			req.Status = "Done Exchanging"
-			serialRequest, err = json.Marshal(req)
-			err = client.Set(id, serialRequest, 0).Err()
-			check(err)
-			finalizerQ = append(finalizerQ, id)
-		}
-	}
-	c <- 2
-}
-
-func finalizer(c chan int) {
-	if len(finalizerQ) == 0 {
-		time.Sleep(2 * time.Second)
+func appendExchangerQ(reqId string) {
+	q, err := client.Get("exchangerQ").Result()
+	check(err)
+	var exchangerQ []string
+	if q == "" || err != nil {
+		exchangerQ = make([]string, 100)
 	} else {
-		id := finalizerQ[0]
-		finalizerQ = finalizerQ[1:]
-		obj, err := client.Get(id).Result()
-		check(err)
-
-		var req Request
-		x := json.Unmarshal([]byte(obj), &req)
-		check(x)
-		req.Status = "Finalizing in process"
-		serialRequest, err := json.Marshal(req)
-		err = client.Set(id, serialRequest, 0).Err()
-		check(err)
-
-		reverseMap := make(map[string]string, len(req.Urls))
-		i := 1
-		for url := range req.Urls {
-			reverseMap[req.Urls[url] + string(i)] = url
-			i++
-		}
-		req.Urls = reverseMap
-		req.Status = "Ready"
-		serialRequest, err = json.Marshal(req)
-		err = client.Set(id, serialRequest, 0).Err()
-		check(err)
+		var exchangerQ []string
+		json.Unmarshal([]byte(q), &exchangerQ)
 	}
-	c <- 3
+	exchangerQ = append(exchangerQ, reqId)
+	serializeExchangerQ, err := json.Marshal(exchangerQ)
+	err = client.Set("exchangerQ", serializeExchangerQ, 0).Err()
+	check(err)
 }
 
 func processNewRequest(w http.ResponseWriter, r *http.Request) {
@@ -138,7 +71,7 @@ func processNewRequest(w http.ResponseWriter, r *http.Request) {
 	serialRequest, err := json.Marshal(newRequest)
 	err = client.Set(reqId, serialRequest, 0).Err()
 	check(err)
-	exhangerQ = append(exhangerQ, reqId)
+	appendExchangerQ(reqId)
 	// Respond with unique Request Id
 	w.Header().Set("req_id", reqId)
 
@@ -154,7 +87,9 @@ func processReqId(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(result))
 }
 
-func router(c chan int) {
+
+
+func main() {
 	r := mux.NewRouter()
 	// Routes for new Request
 	r.HandleFunc("/requests", processNewRequest).
@@ -166,13 +101,4 @@ func router(c chan int) {
 
 	// Bind to a port and pass our router in
 	log.Fatal(http.ListenAndServe(":8000", r))
-	c <- 1
-}
-
-func main() {
-	c := make(chan int, 3)
-	go router(c)
-	go exchanger(c)
-	go finalizer(c)
-	log.Println(<- c, <- c, <- c)
 }

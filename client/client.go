@@ -61,7 +61,7 @@ func main() {
 
 	fmt.Println("RequestID:", reqId)
 	fmt.Println("Request Loop at interval of 10 secs")
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 20; i++ {
 		res, err := http.Get(newUrl)
 		if err != nil {
 			fmt.Println("error accessing ", newUrl)
@@ -74,6 +74,6 @@ func main() {
 			return
 		}
 		fmt.Println(string(body))
-		time.Sleep(10 * time.Second)
+		time.Sleep(2 * time.Second)
 	}
 }

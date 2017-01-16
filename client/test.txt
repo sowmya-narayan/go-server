@@ -1,3 +1,5 @@
-mirror.datapipe.net
-google.com
-google.co.in
+http://httpbin.org/headers
+http://httpbin.org/ip
+http://google.co.in
+http://google.co.in/legacy
+https://www.google.co.in/#safe=active&q=try
